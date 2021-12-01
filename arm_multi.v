@@ -401,10 +401,13 @@ module mainfsm (
 					2'b10: nextstate = BRANCH;
 					default: nextstate = UNKNOWN;
 				endcase
-			EXECUTER:
-			EXECUTEI:
-			MEMADR:
-			MEMRD:
+			EXECUTER: nexstate = ALUWB;
+			EXECUTEI: nexstate = ALUWB;
+			MEMADR: 
+				case (Funct[0])
+					1'b0: nexstate = MEMRD;
+					1'b1: nexstate = MemWrite;
+			MEMRD: nexstate = MEMWB;
 			default: nextstate = FETCH;
 		endcase
 
@@ -413,20 +416,21 @@ module mainfsm (
 	// output logic for the first two states, FETCH and DECODE, for you.
 
 	// state-dependent output logic
-	always @(*)
+	always @(*) begin
 		case (state)
 			FETCH: controls = 13'b1000101001100;
 			DECODE: controls = 13'b0000001001100;
-			EXECUTER: 
-			EXECUTEI: 
-			ALUWB: 
-			MEMADR: 
-			MEMWR: 
-			MEMRD: 
-			MEMWB: 
-			BRANCH: 
+			// EXECUTER: controls = 13'b1000101001100;
+			// EXECUTEI: controls = 13'b1000101001100;
+			// ALUWB: controls = 13'b1000101001100;
+			// MEMADR: controls = 13'b1000101001100;
+			// MEMWR: controls = 13'b1000101001100;
+			// MEMRD: controls = 13'b1000101001100;
+			// MEMWB: controls = 13'b1000101001100;
+			// BRANCH: controls = 13'b1000101001100;
 			default: controls = 13'bxxxxxxxxxxxxx;
 		endcase
+	end
 	assign {NextPC, Branch, MemW, RegW, IRWrite, AdrSrc, ResultSrc, ALUSrcA, ALUSrcB, ALUOp} = controls;
 endmodule
 
