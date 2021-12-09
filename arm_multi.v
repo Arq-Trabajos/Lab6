@@ -1,75 +1,5 @@
 `include "alu.v"
-// arm_multi.v
-// David_Harris@hmc.edu, Sarah_Harris@hmc.edu 25 December 2013
-// Multi-cycle implementation of a subset of ARMv4
 
-// 16 32-bit registers
-// Data-processing instructions
-//   ADD, SUB, AND, ORR
-//   INSTR <cond> <S> <Rd>, <Rn>, #immediate
-//   INSTR <cond> <S> <Rd>, <Rn>, <Rm>
-//    Rd <- <Rn> INSTR <Rm>	    	if (S) Update Status Flags
-//    Rd <- <Rn> INSTR immediate	if (S) Update Status Flags
-//   Instr[31:28] = cond
-//   Instr[27:26] = Op = 00
-//   Instr[25:20] = Funct
-//                  [25]:    1 for immediate, 0 for register
-//                  [24:21]: 0100 (ADD) / 0010 (SUB) /
-//                           0000 (AND) / 1100 (ORR)
-//                  [20]:    S (1 = update CPSR status Flags)
-//   Instr[19:16] = Rn
-//   Instr[15:12] = Rd
-//   Instr[11:8]  = 0000
-//   Instr[7:0]   = immed_8  (for #immediate type) / 
-//                  0000<Rm> (for register type)
-//   
-// Load/Store instructions
-//   LDR, STR
-//   INSTR <Rd>, [<Rn>, #offset]
-//    LDR: Rd <- Mem[<Rn>+offset]
-//    STR: Mem[<Rn>+offset] <- Rd
-//   Instr[31:28] = cond
-//   Instr[27:26] = Op = 01 
-//   Instr[25:20] = Funct
-//                  [25]:    0 (A)
-//                  [24:21]: 1100 (P/U/B/W)
-//                  [20]:    L (1 for LDR, 0 for STR)
-//   Instr[19:16] = Rn
-//   Instr[15:12] = Rd
-//   Instr[11:0]  = imm (zero extended)
-//
-// Branch instruction (PC <= PC + offset, PC holds 8 bytes past Branch
-//   B
-//   INSTR <target>
-//    PC <- PC + 8 + imm << 2
-//   Instr[31:28] = cond
-//   Instr[27:25] = Op = 10
-//   Instr[25:24] = Funct
-//                  [25]: 1 (Branch)
-//                  [24]: 0 (link)
-//   Instr[23:0]  = offset (sign extend, shift left 2)
-//   Note: no Branch delay slot on ARM
-//
-// Other:
-//   R15 reads as PC+8
-//   Conditional Encoding
-//    cond  Meaning                       Flag
-//    0000  Equal                         Z = 1
-//    0001  Not Equal                     Z = 0
-//    0010  Carry Set                     C = 1
-//    0011  Carry Clear                   C = 0
-//    0100  Minus                         N = 1
-//    0101  Plus                          N = 0
-//    0110  Overflow                      V = 1
-//    0111  No Overflow                   V = 0
-//    1000  Unsigned Higher               C = 1 & Z = 0
-//    1001  Unsigned Lower/Same           C = 0 | Z = 1
-//    1010  Signed greater/equal          N = V
-//    1011  Signed less                   N != V
-//    1100  Signed greater                N = V & Z = 0
-//    1101  Signed less/equal             N != V | Z = 1
-//    1110  Always                        any
-//   Writes to register 15 (PC) are ignored 
 module top (
 	clk,
 	reset,
@@ -120,6 +50,7 @@ module mem (
 	always @(posedge clk)
 		if (we)
 			RAM[a[31:2]] <= wd;
+
 endmodule
 
 module arm (
@@ -186,6 +117,7 @@ module arm (
 	);
 endmodule
 
+// Completed
 module controller (
 	clk,
 	reset,
@@ -285,7 +217,7 @@ module decode (
 	input wire [1:0] Op;
 	input wire [5:0] Funct;
 	input wire [3:0] Rd;
-	output wire [1:0] FlagW;
+	output reg [1:0] FlagW;
 	output wire PCS;
 	output wire NextPC;
 	output wire RegW;
@@ -297,7 +229,7 @@ module decode (
 	output wire [1:0] ALUSrcB;
 	output wire [1:0] ImmSrc;
 	output wire [1:0] RegSrc;
-	output wire [1:0] ALUControl;
+	output reg [1:0] ALUControl;
 	wire Branch;
 	wire ALUOp;
 
@@ -319,7 +251,7 @@ module decode (
 		.ALUOp(ALUOp)
 	);
 	// ALU Decoder 
-	always @(*)
+	always @(*) begin
 		if (ALUOp) begin
 			case (Funct[4:1])
 				4'b0100: ALUControl = 2'b00;
@@ -328,14 +260,14 @@ module decode (
 				4'b1100: ALUControl = 2'b11;
 				default: ALUControl = 2'bxx;
 			endcase
-			FlagW[1] = Funct[0];
-			FlagW[0] = Funct[0] & ((ALUControl == 2'b00) | (ALUControl == 2'b01));
-		end
+			FlagW[1] <= Funct[0];
+			FlagW[0] <= Funct[0] & ((ALUControl == 2'b00) | (ALUControl == 2'b01));
+		end 
 		else begin
 			ALUControl = 2'b00;
 			FlagW = 2'b00;
 		end
-
+	end
 	// PC Controller
 	assign PCS = ((Rd == 4'b1111) & RegW) | Branch;
 
@@ -348,7 +280,6 @@ module decode (
 endmodule
 
 
-// Incompleted
 module mainfsm (
 	clk,
 	reset,
@@ -389,6 +320,10 @@ module mainfsm (
 	localparam [3:0] EXECUTER = 6;
 	localparam [3:0] MEMADR = 2;
 	localparam [3:0] UNKNOWN = 10;
+	localparam [3:0] ALUWB = 8;
+	localparam [3:0] MEMRD = 3;
+	localparam [3:0] MEMWB = 4;
+	localparam [3:0] MEMWR = 5;
 
 	// state register
 	always @(posedge clk or posedge reset)
@@ -417,10 +352,14 @@ module mainfsm (
 					2'b10: nextstate = BRANCH;
 					default: nextstate = UNKNOWN;
 				endcase
-			EXECUTER:
-			EXECUTEI:
+			EXECUTER: nextstate = ALUWB;
+			EXECUTEI: nextstate = ALUWB;
 			MEMADR:
-			MEMRD:
+				case (Funct[0])
+					1'b1: nextstate = MEMRD;
+					1'b0: nextstate = MEMWR;
+				endcase
+			MEMRD: nextstate = MEMWB;
 			default: nextstate = FETCH;
 		endcase
 
@@ -433,24 +372,19 @@ module mainfsm (
 		case (state)
 			FETCH: controls = 13'b1000101001100;
 			DECODE: controls = 13'b0000001001100;
-			EXECUTER: 
-			EXECUTEI: 
-			ALUWB: 
-			MEMADR: 
-			MEMWR: 
-			MEMRD: 
-			MEMWB: 
-			BRANCH: 
+			EXECUTER: controls = 13'b0000000000001;
+            EXECUTEI: controls = 13'b0000000000011;
+            ALUWB: controls = 13'b0001000000000;
+            MEMADR: controls = 13'b0000000000010;
+            MEMWR: controls = 13'b0010010000000;
+            MEMRD: controls = 13'b0000010000000;
+            MEMWB: controls = 13'b0001000100000;
+            BRANCH: controls = 13'b0100001000010;
 			default: controls = 13'bxxxxxxxxxxxxx;
 		endcase
 	assign {NextPC, Branch, MemW, RegW, IRWrite, AdrSrc, ResultSrc, ALUSrcA, ALUSrcB, ALUOp} = controls;
 endmodule
 
-// ADD CODE BELOW
-// Add code for the condlogic and condcheck modules. Remember, you may
-// reuse code from prior labs.
-/// Incompleto ->
-// Añadir un delay para CondEx por un ciclo antes de enviar a PCWrite, RegWrite, y MemWrite
 module condlogic (
 	clk,
 	reset,
@@ -477,6 +411,7 @@ module condlogic (
 	output wire PCWrite;
 	output wire RegWrite;
 	output wire MemWrite;
+
 	wire [1:0] FlagWrite;
 	wire [3:0] Flags;
 	wire CondEx;
@@ -489,10 +424,18 @@ module condlogic (
 		FlagWrite
 	);
 
-	// ADD CODE HERE
-
+	condcheck cc(
+		.Cond(Cond),
+		.Flags(Flags),
+		.CondEx(CondEx)
+	);
+	assign FlagWrite = FlagW & {2 {CondEx}};
+	assign RegWrite = RegW & CondEx;
+	assign MemWrite = MemW & CondEx;
+	assign PCWrite = NextPC || (PCWrite && CondEx);
 
 endmodule
+
 ///////////////////////////////////// COMPLETED ////////////////////////
 module condcheck (
 	Cond,
@@ -501,7 +444,7 @@ module condcheck (
 );
 	input wire [3:0] Cond;
 	input wire [3:0] Flags;
-	output wire CondEx;
+	output reg CondEx;
 	wire neg;
 	wire zero;
 	wire carry;
@@ -559,9 +502,9 @@ module datapath (
 	input wire clk;
 	input wire reset;
 	output wire [31:0] Adr;
-	output wire [31:0] WriteData;
+	output reg [31:0] WriteData;
 	input wire [31:0] ReadData;
-	output wire [31:0] Instr;
+	output reg [31:0] Instr;
 	output wire [3:0] ALUFlags;
 	input wire PCWrite;
 	input wire RegWrite;
@@ -574,17 +517,17 @@ module datapath (
 	input wire [1:0] ImmSrc;
 	input wire [1:0] ALUControl;
 	wire [31:0] PCNext;
-	wire [31:0] PC;
+	reg [31:0] PC;
 	wire [31:0] ExtImm;
 	wire [31:0] SrcA;
 	wire [31:0] SrcB;
 	wire [31:0] Result;
-	wire [31:0] Data;
+	reg [31:0] Data;
 	wire [31:0] RD1;
 	wire [31:0] RD2;
-	wire [31:0] A;
+	reg [31:0] A;
 	wire [31:0] ALUResult;
-	wire [31:0] ALUOut;
+	reg [31:0] ALUOut;
 	wire [3:0] RA1;
 	wire [3:0] RA2;
 
@@ -593,13 +536,25 @@ module datapath (
 	// from previous labs. Be sure to give your instantiated modules 
 	// applicable names such as pcreg (PC register), adrmux 
 	// (Address Mux), etc. so that your code is easier to understand.
-
 	// ADD CODE HERE
+
+	always @(posedge clk) begin
+		if(PCWrite) begin 
+			PC <= Result;
+		end
+	end
+
+	assign Adr = (AdrSrc?Result:PC);
+
+	always @(posedge clk) begin
+		Data <= ReadData; 
+		Instr <= ReadData; 
+	end
 	
 	wire [31:0] rdata1, rdata2;
 	register_file rfile(clk, RA1, RA2, Instr[15:12], Result, Result, RegWrite, rdata1, rdata2);
 
-	always posedge clk begin
+	always @(posedge clk) begin
 		A <= rdata1;
 		WriteData <= rdata2;
 	end
@@ -610,9 +565,13 @@ module datapath (
 
 	mux3 alusrcb(WriteData, ExtImm, 4, ALUSrcB, SrcB);
 
-	ALU alu_dp(SrcA ,SrcB, ALUControl ,ALUResult, ALUFlags);
+	alu alu_dp(SrcA ,SrcB, ALUControl ,ALUResult, ALUFlags);
 
-	
+	always @(posedge clk) begin
+		ALUOut <= ALUResult;
+	end
+
+	mux3 muxresult(ALUOut, Data, ALUResult, ResultSrc, Result);
 
 
 endmodule
@@ -629,7 +588,7 @@ module register_file(
 	input wire [31:0] WD3, input wire [31:0] R15, input wire WE3,
 	output wire [31:0] RD1, output wire [31:0] RD2
 );
-	wire [31:0] registros [14:0];
+	reg [31:0] registros [14:0];
 	integer i;
 	initial begin
 		for( i= 0; i<15; i++) begin
@@ -640,7 +599,7 @@ module register_file(
 	assign RD1 = registros[A1];
 	assign RD2 = registros[A2];
 
-	always posedge clk begin
+	always @(posedge clk) begin
 		if (WE3) begin
 			registros[A3] <= WD3;
 		end
@@ -648,18 +607,20 @@ module register_file(
 
 endmodule
 
-module extend (
-    input [23:0]Instr, input [1:0] ImmSrc,
-    output [31:0] ExtImm
-);
 
-    case (ImmSrc)
+module extend (
+	input wire [23:0] Instr,
+	input wire [1:0] ImmSrc,
+	output reg [31:0] ExtImm
+);
+	always @(*) begin
+		case (ImmSrc)
 			2'b00: ExtImm = {24'b000000000000000000000000, Instr[7:0]};
 			2'b01: ExtImm = {20'b00000000000000000000, Instr[11:0]};
 			2'b10: ExtImm = {{6 {Instr[23]}}, Instr[23:0], 2'b00};
 			default: ExtImm = 32'bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx;
-	endcase
-    
+		endcase
+	end
 endmodule
 
 module mux3 (
@@ -669,11 +630,73 @@ module mux3 (
 	s,
 	y
 );
-	parameter WIDTH = 8;
+	parameter WIDTH = 32;
 	input wire [WIDTH - 1:0] d0;
 	input wire [WIDTH - 1:0] d1;
 	input wire [WIDTH - 1:0] d2;
 	input wire [1:0] s;
 	output wire [WIDTH - 1:0] y;
 	assign y = (s[1] ? d2 : (s[0] ? d1 : d0));
+endmodule
+module adder (
+	a,
+	b,
+	y
+);
+	parameter WIDTH = 8;
+	input wire [WIDTH - 1:0] a;
+	input wire [WIDTH - 1:0] b;
+	output wire [WIDTH - 1:0] y;
+	assign y = a + b;
+endmodule
+module flopenr (
+	clk,
+	reset,
+	en,
+	d,
+	q
+);
+	parameter WIDTH = 8;
+	input wire clk;
+	input wire reset;
+	input wire en;
+	input wire [WIDTH - 1:0] d;
+	output reg [WIDTH - 1:0] q;
+	always @(posedge clk or posedge reset) begin
+		if (reset)
+			q <= 0;
+		else if (en)
+			q <= d;
+	end
+endmodule
+module flopr (
+	clk,
+	reset,
+	d,
+	q
+);
+	parameter WIDTH = 8;
+	input wire clk;
+	input wire reset;
+	input wire [WIDTH - 1:0] d;
+	output reg [WIDTH - 1:0] q;
+	always @(posedge clk or posedge reset) begin
+		if (reset)
+			q <= 0;
+		else
+			q <= d;
+	end
+endmodule
+module mux2 (
+	d0,
+	d1,
+	s,
+	y
+);
+	parameter WIDTH = 8;
+	input wire [WIDTH - 1:0] d0;
+	input wire [WIDTH - 1:0] d1;
+	input wire s;
+	output wire [WIDTH - 1:0] y;
+	assign y = (s ? d1 : d0);
 endmodule
