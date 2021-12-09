@@ -258,6 +258,7 @@ module controller (
 	);
 endmodule
 
+///////////////////////// COMPLETED /////////////////////
 module decode (
 	clk,
 	reset,
@@ -316,23 +317,37 @@ module decode (
 		.Branch(Branch),
 		.ALUOp(ALUOp)
 	);
+	// ALU Decoder 
+	always @(*)
+		if (ALUOp) begin
+			case (Funct[4:1])
+				4'b0100: ALUControl = 2'b00;
+				4'b0010: ALUControl = 2'b01;
+				4'b0000: ALUControl = 2'b10;
+				4'b1100: ALUControl = 2'b11;
+				default: ALUControl = 2'bxx;
+			endcase
+			FlagW[1] = Funct[0];
+			FlagW[0] = Funct[0] & ((ALUControl == 2'b00) | (ALUControl == 2'b01));
+		end
+		else begin
+			ALUControl = 2'b00;
+			FlagW = 2'b00;
+		end
 
-	// ADD CODE BELOW
-	// Add code for the ALU Decoder and PC Logic.
-	// Remember, you may reuse code from previous labs.
-	// ALU Decoder
-
-	// PC Logic
-
-
-	// Add code for the Instruction Decoder (Instr Decoder) below.
-	// Recall that the input to Instr Decoder is Op, and the outputs are
-	// ImmSrc and RegSrc. We've completed the ImmSrc logic for you.
+	// PC Controller
+	assign PCS = ((Rd == 4'b1111) & RegW) | Branch;
 
 	// Instr Decoder
 	assign ImmSrc = Op;
+
+	// RegSrc Decoder
+	assign RegSrc[0] = (Op == 2b'01);
+	assign RegSrc[1] = (Op == 2b'10);
 endmodule
 
+
+// Incompleted
 module mainfsm (
 	clk,
 	reset,
@@ -401,13 +416,10 @@ module mainfsm (
 					2'b10: nextstate = BRANCH;
 					default: nextstate = UNKNOWN;
 				endcase
-			EXECUTER: nexstate = ALUWB;
-			EXECUTEI: nexstate = ALUWB;
-			MEMADR: 
-				case (Funct[0])
-					1'b0: nexstate = MEMRD;
-					1'b1: nexstate = MemWrite;
-			MEMRD: nexstate = MEMWB;
+			EXECUTER:
+			EXECUTEI:
+			MEMADR:
+			MEMRD:
 			default: nextstate = FETCH;
 		endcase
 
@@ -416,27 +428,28 @@ module mainfsm (
 	// output logic for the first two states, FETCH and DECODE, for you.
 
 	// state-dependent output logic
-	always @(*) begin
+	always @(*)
 		case (state)
 			FETCH: controls = 13'b1000101001100;
 			DECODE: controls = 13'b0000001001100;
-			// EXECUTER: controls = 13'b1000101001100;
-			// EXECUTEI: controls = 13'b1000101001100;
-			// ALUWB: controls = 13'b1000101001100;
-			// MEMADR: controls = 13'b1000101001100;
-			// MEMWR: controls = 13'b1000101001100;
-			// MEMRD: controls = 13'b1000101001100;
-			// MEMWB: controls = 13'b1000101001100;
-			// BRANCH: controls = 13'b1000101001100;
+			EXECUTER: 
+			EXECUTEI: 
+			ALUWB: 
+			MEMADR: 
+			MEMWR: 
+			MEMRD: 
+			MEMWB: 
+			BRANCH: 
 			default: controls = 13'bxxxxxxxxxxxxx;
 		endcase
-	end
 	assign {NextPC, Branch, MemW, RegW, IRWrite, AdrSrc, ResultSrc, ALUSrcA, ALUSrcB, ALUOp} = controls;
 endmodule
 
 // ADD CODE BELOW
 // Add code for the condlogic and condcheck modules. Remember, you may
 // reuse code from prior labs.
+/// Incompleto ->
+// Añadir un delay para CondEx por un ciclo antes de enviar a PCWrite, RegWrite, y MemWrite
 module condlogic (
 	clk,
 	reset,
@@ -477,8 +490,9 @@ module condlogic (
 
 	// ADD CODE HERE
 
-endmodule
 
+endmodule
+///////////////////////////////////// COMPLETED ////////////////////////
 module condcheck (
 	Cond,
 	Flags,
@@ -487,8 +501,32 @@ module condcheck (
 	input wire [3:0] Cond;
 	input wire [3:0] Flags;
 	output wire CondEx;
-
-	// ADD CODE HERE
+	wire neg;
+	wire zero;
+	wire carry;
+	wire overflow;
+	wire ge;
+	assign {neg, zero, carry, overflow} = Flags;
+	assign ge = neg == overflow;
+	always @(*)
+		case (Cond)
+			4'b0000: CondEx = zero;
+			4'b0001: CondEx = ~zero;
+			4'b0010: CondEx = carry;
+			4'b0011: CondEx = ~carry;
+			4'b0100: CondEx = neg;
+			4'b0101: CondEx = ~neg;
+			4'b0110: CondEx = overflow;
+			4'b0111: CondEx = ~overflow;
+			4'b1000: CondEx = carry & ~zero;
+			4'b1001: CondEx = ~(carry & ~zero);
+			4'b1010: CondEx = ge;
+			4'b1011: CondEx = ~ge;
+			4'b1100: CondEx = ~zero & ge;
+			4'b1101: CondEx = ~(~zero & ge);
+			4'b1110: CondEx = 1'b1;
+			default: CondEx = 1'bx;
+		endcase
 endmodule
 
 // ADD CODE BELOW
@@ -556,6 +594,19 @@ module datapath (
 	// (Address Mux), etc. so that your code is easier to understand.
 
 	// ADD CODE HERE
+	
+	wire [31:0] Instr, Result, rdata1, rdata2, A, WriteData;
+	wire [3:0] RA1, RA2;
+	wire RegWrite;
+	register_file rfile(clk, RA1, RA2, Instr[15:12], Result, Result, RegWrite, rdata1, rdata2);
+
+	always posedge clk begin
+		A <= rdata1;
+		WriteData <= rdata2;
+	end
+	
+	mux3 alusrcb()
+
 endmodule
 
 // ADD CODE BELOW
@@ -563,6 +614,45 @@ endmodule
 // registers, etc.). Remember, you can reuse code from previous labs.
 // We've also provided a parameterizable 3:1 mux below for your 
 // convenience.
+
+module register_file(
+	input wire clk,
+	input wire [3:0] A1, input wire [3:0] A2, input wire [3:0] A3,
+	input wire [31:0] WD3, input wire [31:0] R15, input wire WE3,
+	output wire [31:0] RD1, output wire [31:0] RD2
+);
+	wire [31:0] registros [14:0];
+	integer i;
+	initial begin
+		for( i= 0; i<15; i++) begin
+		  registros[i] = 32'b0;
+		end
+	end
+
+	assign RD1 = registros[A1];
+	assign RD2 = registros[A2];
+
+	always posedge clk begin
+		if (WE3) begin
+			registros[A3] <= WD3;
+		end
+	end
+
+endmodule
+
+module extend (
+    input [23:0]Instr, input [1:0] ImmSrc,
+    output [31:0] ExtImm
+);
+
+    case (ImmSrc)
+			2'b00: ExtImm = {24'b000000000000000000000000, Instr[7:0]};
+			2'b01: ExtImm = {20'b00000000000000000000, Instr[11:0]};
+			2'b10: ExtImm = {{6 {Instr[23]}}, Instr[23:0], 2'b00};
+			default: ExtImm = 32'bxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx;
+	endcase
+    
+endmodule
 
 module mux3 (
 	d0,
