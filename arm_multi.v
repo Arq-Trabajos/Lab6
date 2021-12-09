@@ -1,3 +1,4 @@
+`include "alu.v"
 // arm_multi.v
 // David_Harris@hmc.edu, Sarah_Harris@hmc.edu 25 December 2013
 // Multi-cycle implementation of a subset of ARMv4
@@ -342,8 +343,8 @@ module decode (
 	assign ImmSrc = Op;
 
 	// RegSrc Decoder
-	assign RegSrc[0] = (Op == 2b'01);
-	assign RegSrc[1] = (Op == 2b'10);
+	assign RegSrc[0] = (Op == 2'b01);
+	assign RegSrc[1] = (Op == 2'b10);
 endmodule
 
 
@@ -595,17 +596,24 @@ module datapath (
 
 	// ADD CODE HERE
 	
-	wire [31:0] Instr, Result, rdata1, rdata2, A, WriteData;
-	wire [3:0] RA1, RA2;
-	wire RegWrite;
+	wire [31:0] rdata1, rdata2;
 	register_file rfile(clk, RA1, RA2, Instr[15:12], Result, Result, RegWrite, rdata1, rdata2);
 
 	always posedge clk begin
 		A <= rdata1;
 		WriteData <= rdata2;
 	end
+
+	assign SrcA = (ALUSrcA?PC:A);
 	
-	mux3 alusrcb()
+	extend ext(Instr[23:0], ImmSrc, ExtImm);
+
+	mux3 alusrcb(WriteData, ExtImm, 4, ALUSrcB, SrcB);
+
+	ALU alu_dp(SrcA ,SrcB, ALUControl ,ALUResult, ALUFlags);
+
+	
+
 
 endmodule
 
